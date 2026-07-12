@@ -56,7 +56,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
   void initState() {
     super.initState();
 
-    // 1. Build config – allow EAN-13 and UPC-A for testing.
+    // 1. Build config – allow all format by leaving empty list.
     const config = BarcodeScannerConfig();
 
     // 2. Instantiate the service.
@@ -87,10 +87,14 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
 
   // ── Barcode processing ─────────────────────────────────────────────────
 
+  void _addToHistory(BarcodeResult result) {
+    _scanHistory.insert(0, (result, DateTime.now()));
+  }
+
   void _processCapture(BarcodeCapture capture) {
     setState(() {
       _recentBarcode = '${capture.rawValue} (${capture.format.name})';
-      _scanHistory.insert(0, (capture, DateTime.now()));
+      _addToHistory(capture);
     });
   }
 
@@ -103,7 +107,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
 
     setState(() {
       _lastRejection = '$rawValue -> (${rejection.reason.name})';
-      _scanHistory.insert(0, (rejection, DateTime.now()));
+      _addToHistory(rejection);
     });
   }
 
