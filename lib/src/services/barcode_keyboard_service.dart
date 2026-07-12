@@ -31,8 +31,7 @@ class BarcodeKeyboardService {
 
   /// A broadcast stream of [BarcodeRejection] results for scans that failed
   /// validation or were deduplicated.
-  Stream<BarcodeRejection> get rejectionStream =>
-      _rejectionController.stream;
+  Stream<BarcodeRejection> get rejectionStream => _rejectionController.stream;
 
   /// Registers the keyboard handler with [HardwareKeyboard].
   void start() {
@@ -81,9 +80,7 @@ class BarcodeKeyboardService {
     final rejection = BarcodeRejection(code, reason);
     _rejectionController.sink.add(rejection);
     if (config.enableDebugLogs) {
-      debugPrint(
-        '[BarcodeKeyboardService] Rejected (${reason.name}): $code',
-      );
+      debugPrint('[BarcodeKeyboardService] Rejected (${reason.name}): $code');
     }
     return false;
   }
@@ -109,13 +106,15 @@ class BarcodeKeyboardService {
 
       if (scannedCode.isEmpty) return false;
 
-      // 1. Format Detection & Gatekeeper
+      // 1. Format Gatekeeper
       final formatsToTest = config.allowedFormats.isNotEmpty
           ? config.allowedFormats
           : BarcodeFormat.values;
 
       final format = BarcodeFormat.detectFormat(scannedCode, formatsToTest);
-      if (format == BarcodeFormat.unknown && config.allowedFormats.isNotEmpty) {
+
+      // STRICT GUARD: If it doesn't match a known regex, reject immediately.
+      if (format == BarcodeFormat.unknown) {
         return _emitRejection(scannedCode, RejectionReason.unsupportedFormat);
       }
 

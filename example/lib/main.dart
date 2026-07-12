@@ -57,7 +57,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
     super.initState();
 
     // 1. Build config – allow all format by leaving empty list.
-    const config = BarcodeScannerConfig();
+    const config = BarcodeScannerConfig(allowedFormats: [BarcodeFormat.ean13, BarcodeFormat.ean8]);
 
     // 2. Instantiate the service.
     _barcodeService = BarcodeKeyboardService(config);
