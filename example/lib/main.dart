@@ -29,9 +29,10 @@ class MyApp extends StatelessWidget {
 
 class ScanRecord {
   final String barcode;
+  final BarcodeFormat? format;
   final DateTime timestamp;
 
-  const ScanRecord({required this.barcode, required this.timestamp});
+  const ScanRecord({required this.barcode, this.format, required this.timestamp});
 }
 
 // ---------------------------------------------------------------------------
@@ -48,10 +49,12 @@ class ScannerTestScreen extends StatefulWidget {
 class _ScannerTestScreenState extends State<ScannerTestScreen> {
   // ── Service & subscription ──────────────────────────────────────────────
   late final BarcodeKeyboardService _barcodeService;
-  late final StreamSubscription<String> _barcodeSubscription;
+  late final StreamSubscription<BarcodeCapture> _barcodeSubscription;
+  late final StreamSubscription<BarcodeRejection> _rejectionSubscription;
 
   // ── UI state ────────────────────────────────────────────────────────────
   String _recentBarcode = '—';
+  String _lastRejection = '';
   int _totalScans = 0;
   final List<ScanRecord> _scanHistory = [];
 
@@ -77,13 +80,19 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
 
     // 4. Subscribe to the barcode stream.
     _barcodeSubscription = _barcodeService.barcodeStream.listen(
-      _processBarcode,
+      _processCapture,
+    );
+
+    // 5. Subscribe to the rejection stream.
+    _rejectionSubscription = _barcodeService.rejectionStream.listen(
+      _processRejection,
     );
   }
 
   @override
   void dispose() {
     _barcodeSubscription.cancel();
+    _rejectionSubscription.cancel();
     _barcodeService.dispose();
     _manualController.dispose();
     super.dispose();
@@ -91,14 +100,25 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
 
   // ── Barcode processing ─────────────────────────────────────────────────
 
-  void _processBarcode(String code) {
+  void _processCapture(BarcodeCapture capture) {
     setState(() {
-      _recentBarcode = code;
+      _recentBarcode = '${capture.rawValue} (${capture.format.name})';
       _totalScans++;
       _scanHistory.insert(
         0,
-        ScanRecord(barcode: code, timestamp: DateTime.now()),
+        ScanRecord(
+          barcode: capture.rawValue,
+          format: capture.format,
+          timestamp: DateTime.now(),
+        ),
       );
+    });
+  }
+
+  void _processRejection(BarcodeRejection rejection) {
+    setState(() {
+      _lastRejection =
+          '${rejection.rawValue} (${rejection.reason.name})';
     });
   }
 
@@ -106,7 +126,13 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
     final text = _manualController.text.trim();
     if (text.isEmpty) return;
 
-    _processBarcode(text);
+    final result = _barcodeService.validateManualEntry(text);
+    switch (result) {
+      case BarcodeCapture():
+        _processCapture(result);
+      case BarcodeRejection():
+        _processRejection(result);
+    }
     _manualController.clear();
   }
 
@@ -148,6 +174,15 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
                       'Total scans: $_totalScans',
                       style: theme.textTheme.bodyLarge,
                     ),
+                    if (_lastRejection.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Last rejection: $_lastRejection',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -196,16 +231,21 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
                     )
                   : ListView.separated(
                       itemCount: _scanHistory.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final record = _scanHistory[index];
+                        final formatLabel = record.format != null
+                            ? ' [${record.format!.name}]'
+                            : '';
                         return ListTile(
                           leading: const Icon(Icons.qr_code_2),
                           title: Text(
                             record.barcode,
                             style: const TextStyle(fontFamily: 'monospace'),
                           ),
-                          subtitle: Text(_formatTimestamp(record.timestamp)),
+                          subtitle: Text(
+                            '${_formatTimestamp(record.timestamp)}$formatLabel',
+                          ),
                           trailing: Text(
                             '#${_scanHistory.length - index}',
                             style: theme.textTheme.labelSmall,

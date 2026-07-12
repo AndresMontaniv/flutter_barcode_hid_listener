@@ -1,16 +1,23 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../models/barcode_format.dart';
+import '../models/barcode_result.dart';
 import '../models/barcode_scanner_config.dart';
 
 /// A headless service that intercepts raw system keystrokes via
 /// [HardwareKeyboard], assembles them into a buffer, validates against
-/// configured [BarcodeFormat] symbologies, and emits deduplicated barcode
-/// strings through a broadcast [Stream].
+/// configured [BarcodeFormat] symbologies, and emits deduplicated
+/// [BarcodeCapture] objects through a broadcast [Stream].
+///
+/// Rejected scans are emitted on a secondary [rejectionStream].
 class BarcodeKeyboardService {
   final BarcodeScannerConfig config;
 
-  final StreamController<String> _controller =
-      StreamController<String>.broadcast();
+  final StreamController<BarcodeCapture> _controller =
+      StreamController<BarcodeCapture>.broadcast();
+  final StreamController<BarcodeRejection> _rejectionController =
+      StreamController<BarcodeRejection>.broadcast();
   final StringBuffer _buffer = StringBuffer();
   DateTime? _lastEventTime;
   DateTime? _lastScannedTime;
@@ -19,8 +26,13 @@ class BarcodeKeyboardService {
   /// Creates a [BarcodeKeyboardService] with the given [config].
   BarcodeKeyboardService(this.config);
 
-  /// A broadcast stream of validated, deduplicated barcode strings.
-  Stream<String> get barcodeStream => _controller.stream;
+  /// A broadcast stream of validated, deduplicated [BarcodeCapture] results.
+  Stream<BarcodeCapture> get barcodeStream => _controller.stream;
+
+  /// A broadcast stream of [BarcodeRejection] results for scans that failed
+  /// validation or were deduplicated.
+  Stream<BarcodeRejection> get rejectionStream =>
+      _rejectionController.stream;
 
   /// Registers the keyboard handler with [HardwareKeyboard].
   void start() {
@@ -32,10 +44,48 @@ class BarcodeKeyboardService {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
   }
 
-  /// Removes the keyboard handler and closes the stream controller.
+  /// Removes the keyboard handler and closes both stream controllers.
   void dispose() {
     stop();
     _controller.close();
+    _rejectionController.close();
+  }
+
+  /// Validates a manually entered barcode string against the configured
+  /// [BarcodeFormat] symbologies.
+  ///
+  /// Returns a [BarcodeCapture] if the value matches a known format, or a
+  /// [BarcodeRejection] if it does not. Does **not** apply deduplication and
+  /// does **not** emit the result to any stream.
+  BarcodeResult validateManualEntry(String rawValue) {
+    if (rawValue.isEmpty) {
+      return const BarcodeRejection('', RejectionReason.empty);
+    }
+
+    final formatsToTest = config.allowedFormats.isNotEmpty
+        ? config.allowedFormats
+        : BarcodeFormat.values;
+
+    final format = BarcodeFormat.detectFormat(rawValue, formatsToTest);
+
+    if (format == BarcodeFormat.unknown) {
+      return BarcodeRejection(rawValue, RejectionReason.unsupportedFormat);
+    }
+
+    return BarcodeCapture(rawValue, format);
+  }
+
+  /// Emits a [BarcodeRejection] on the rejection stream, logs if debug is
+  /// enabled, and returns `false` so callers can `return _emitRejection(…)`.
+  bool _emitRejection(String code, RejectionReason reason) {
+    final rejection = BarcodeRejection(code, reason);
+    _rejectionController.sink.add(rejection);
+    if (config.enableDebugLogs) {
+      debugPrint(
+        '[BarcodeKeyboardService] Rejected (${reason.name}): $code',
+      );
+    }
+    return false;
   }
 
   bool _handleKeyEvent(KeyEvent event) {
@@ -59,26 +109,38 @@ class BarcodeKeyboardService {
 
       if (scannedCode.isEmpty) return false;
 
-      // Format validation: if allowedFormats is non-empty, the code must
-      // match at least one format's regex.
-      if (config.allowedFormats.isNotEmpty) {
-        final matchesAny = config.allowedFormats.any(
-          (format) => format.validationRegex.hasMatch(scannedCode),
-        );
-        if (!matchesAny) return false;
+      // 1. Format Detection & Gatekeeper
+      final formatsToTest = config.allowedFormats.isNotEmpty
+          ? config.allowedFormats
+          : BarcodeFormat.values;
+
+      final format = BarcodeFormat.detectFormat(scannedCode, formatsToTest);
+      if (format == BarcodeFormat.unknown && config.allowedFormats.isNotEmpty) {
+        return _emitRejection(scannedCode, RejectionReason.unsupportedFormat);
       }
 
-      // Deduplication shield: reject duplicate scans within the window.
+      // 2. Deduplication Shield (Single Check)
       if (_lastScannedCode == scannedCode &&
           _lastScannedTime != null &&
           now.difference(_lastScannedTime!) < config.deduplicationWindow) {
-        return false;
+        return _emitRejection(scannedCode, RejectionReason.deduplicated);
       }
 
+      // 3. Emit Success
       _lastScannedCode = scannedCode;
       _lastScannedTime = now;
-      _controller.sink.add(scannedCode);
+      _controller.sink.add(BarcodeCapture(scannedCode, format));
     } else {
+      // Buffer overflow guard: clear and reject if a malfunctioning scanner
+      // streams excessive data.
+      if (_buffer.length >= config.maxBufferLength) {
+        _buffer.clear();
+        return _emitRejection(
+          event.character ?? 'OVERFLOW',
+          RejectionReason.bufferOverflow,
+        );
+      }
+
       // Ongoing scan – accumulate printable characters.
       final character = event.character;
       if (character != null && character.isNotEmpty) {
