@@ -1,7 +1,9 @@
 import 'dart:async';
 
-import 'package:barcode_keyboard_listener/barcode_keyboard_listener.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
+
+import 'package:barcode_keyboard_listener/barcode_keyboard_listener.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,18 +26,6 @@ class MyApp extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Data model for a single scan record.
-// ---------------------------------------------------------------------------
-
-class ScanRecord {
-  final String barcode;
-  final BarcodeFormat? format;
-  final DateTime timestamp;
-
-  const ScanRecord({required this.barcode, this.format, required this.timestamp});
-}
-
-// ---------------------------------------------------------------------------
 // ScannerTestScreen – proves headless BarcodeKeyboardService integration.
 // ---------------------------------------------------------------------------
 
@@ -55,8 +45,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
   // ── UI state ────────────────────────────────────────────────────────────
   String _recentBarcode = '—';
   String _lastRejection = '';
-  int _totalScans = 0;
-  final List<ScanRecord> _scanHistory = [];
+  final List<(BarcodeResult, DateTime)> _scanHistory = [];
 
   // ── Manual entry ────────────────────────────────────────────────────────
   final TextEditingController _manualController = TextEditingController();
@@ -68,9 +57,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
     super.initState();
 
     // 1. Build config – allow EAN-13 and UPC-A for testing.
-    const config = BarcodeScannerConfig(
-      allowedFormats: [BarcodeFormat.ean13, BarcodeFormat.upcA, BarcodeFormat.ean8],
-    );
+    const config = BarcodeScannerConfig();
 
     // 2. Instantiate the service.
     _barcodeService = BarcodeKeyboardService(config);
@@ -103,22 +90,20 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
   void _processCapture(BarcodeCapture capture) {
     setState(() {
       _recentBarcode = '${capture.rawValue} (${capture.format.name})';
-      _totalScans++;
-      _scanHistory.insert(
-        0,
-        ScanRecord(
-          barcode: capture.rawValue,
-          format: capture.format,
-          timestamp: DateTime.now(),
-        ),
-      );
+      _scanHistory.insert(0, (capture, DateTime.now()));
     });
   }
 
   void _processRejection(BarcodeRejection rejection) {
+    const int maxDisplayLength = 20;
+    String rawValue = rejection.rawValue;
+    if (rawValue.length > maxDisplayLength) {
+      rawValue = '${rawValue.substring(0, maxDisplayLength)}…';
+    }
+
     setState(() {
-      _lastRejection =
-          '${rejection.rawValue} (${rejection.reason.name})';
+      _lastRejection = '$rawValue -> (${rejection.reason.name})';
+      _scanHistory.insert(0, (rejection, DateTime.now()));
     });
   }
 
@@ -171,7 +156,7 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Total scans: $_totalScans',
+                      'Total scans: ${_scanHistory.length}',
                       style: theme.textTheme.bodyLarge,
                     ),
                     if (_lastRejection.isNotEmpty) ...[
@@ -233,24 +218,53 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
                       itemCount: _scanHistory.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final record = _scanHistory[index];
-                        final formatLabel = record.format != null
-                            ? ' [${record.format!.name}]'
-                            : '';
-                        return ListTile(
-                          leading: const Icon(Icons.qr_code_2),
-                          title: Text(
-                            record.barcode,
-                            style: const TextStyle(fontFamily: 'monospace'),
-                          ),
-                          subtitle: Text(
-                            '${_formatTimestamp(record.timestamp)}$formatLabel',
-                          ),
-                          trailing: Text(
-                            '#${_scanHistory.length - index}',
-                            style: theme.textTheme.labelSmall,
-                          ),
-                        );
+                        final (record, timestamp) = _scanHistory[index];
+                        switch (record) {
+                          case BarcodeCapture():
+                            return ListTile(
+                              leading: const Icon(
+                                CupertinoIcons.barcode,
+                                color: Colors.black,
+                                size: 35,
+                              ),
+                              title: Text(
+                                record.rawValue,
+                                style: const TextStyle(fontFamily: 'monospace'),
+                              ),
+                              subtitle: Text(
+                                record.format.name.toUpperCase(),
+                                style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                              ),
+                              trailing: Text(_formatTimestamp(timestamp)),
+                            );
+                          case BarcodeRejection():
+                            return ListTile(
+                              leading: const Icon(
+                                CupertinoIcons.barcode,
+                                color: Colors.black,
+                                size: 35,
+                              ),
+                              title: Text(
+                                record.rawValue,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                maxLines: 1,
+                              ),
+                              subtitle: Text(
+                                record.reason.name,
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 12,
+
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                maxLines: 2,
+                              ),
+                              trailing: Text(_formatTimestamp(timestamp)),
+                            );
+                        }
                       },
                     ),
             ),
