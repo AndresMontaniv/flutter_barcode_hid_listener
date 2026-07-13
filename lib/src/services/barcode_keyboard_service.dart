@@ -5,6 +5,8 @@ import '../models/barcode_format.dart';
 import '../models/barcode_result.dart';
 import '../models/barcode_scanner_config.dart';
 
+const _gs1Prefix = '01';
+
 /// A headless service that intercepts raw system keystrokes via
 /// [HardwareKeyboard], assembles them into a buffer, validates against
 /// configured [BarcodeFormat] symbologies, and emits deduplicated
@@ -121,10 +123,18 @@ class BarcodeKeyboardService {
 
     // Check if this keystroke is a configured terminator (scan complete).
     if (config.terminators.contains(event.logicalKey)) {
-      final scannedCode = _buffer.toString();
+      var scannedCode = _buffer.toString();
       _buffer.clear();
 
       if (scannedCode.isEmpty) return false;
+
+      // --- GS1 AI NORMALIZATION PRE-PROCESSOR ---
+      // If a warehouse EAN-14 arrives with the GS1 Application Identifier '01'
+      // (16 numeric digits total), strip the '01' prefix so the gatekeeper and
+      // downstream consumers always receive a consistent 14-digit GTIN.
+      if (scannedCode.length == 16 && scannedCode.startsWith(_gs1Prefix)) {
+        scannedCode = scannedCode.substring(_gs1Prefix.length);
+      }
 
       // 1. Stage 1: Check if the barcode matches an ALLOWED format.
       final allowedToTest = config.allowedFormats.isNotEmpty ? config.allowedFormats : BarcodeFormat.values;
