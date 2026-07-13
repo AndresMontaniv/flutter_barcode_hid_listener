@@ -50,49 +50,6 @@ class BarcodeKeyboardService {
     _rejectionController.close();
   }
 
-  /// Validates a manually entered barcode string against the configured
-  /// [BarcodeFormat] symbologies.
-  ///
-  /// Returns a [BarcodeCapture] if the value matches a known format, or a
-  /// [BarcodeRejection] if it does not. Does **not** apply deduplication and
-  /// does **not** emit the result to any stream.
-  BarcodeResult validateManualEntry(String rawValue) {
-    if (rawValue.isEmpty) {
-      return const BarcodeRejection('', RejectionReason.empty);
-    }
-
-    // 1. Stage 1: Check if the barcode matches an ALLOWED format.
-    final allowedToTest = config.allowedFormats.isNotEmpty ? config.allowedFormats : BarcodeFormat.values;
-
-    final allowedFormat = BarcodeFormat.detectFormat(rawValue, allowedToTest);
-
-    if (allowedFormat != BarcodeFormat.unknown) {
-      return BarcodeCapture(rawValue, allowedFormat);
-    }
-
-    // 2. Stage 2: It failed the allowed list. Is it a KNOWN format that was disallowed?
-    if (config.allowedFormats.isNotEmpty) {
-      final knownFormat = BarcodeFormat.detectFormat(
-        rawValue,
-        BarcodeFormat.values,
-      );
-      if (knownFormat != BarcodeFormat.unknown) {
-        return BarcodeRejection(
-          rawValue,
-          RejectionReason.disallowedFormat,
-          knownFormat,
-        );
-      }
-    }
-
-    // 3. Complete Failure: Unsupported symbology or corrupted string.
-    return BarcodeRejection(
-      rawValue,
-      RejectionReason.unsupportedFormat,
-      BarcodeFormat.unknown,
-    );
-  }
-
   /// Emits a [BarcodeRejection] on the rejection stream, logs if debug is
   /// enabled, and returns `false` so callers can `return _emitRejection(…)`.
   bool _emitRejection(

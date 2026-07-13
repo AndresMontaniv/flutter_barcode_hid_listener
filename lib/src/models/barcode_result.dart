@@ -2,16 +2,26 @@ import 'barcode_format.dart';
 
 /// Reasons a scanned or manually entered barcode may be rejected.
 enum RejectionReason {
-  unsupportedFormat, // String failed ALL known symbology regex patterns
-  disallowedFormat,  // String matched a known format, but was NOT in allowedFormats
-  deduplicated,      // Caught by the temporal deduplication shield
-  empty,             // Zero characters scanned
-  bufferOverflow,    // Exceeded maxBufferLength
+  /// The barcode string failed all known symbology regex patterns.
+  unsupportedFormat,
+
+  /// The barcode matched a known format, but that format was not in [BarcodeScannerConfig.allowedFormats].
+  disallowedFormat,
+
+  /// The scan was caught by the temporal deduplication shield.
+  deduplicated,
+
+  /// Zero characters were scanned or submitted.
+  empty,
+
+  /// The keystroke buffer exceeded [BarcodeScannerConfig.maxBufferLength].
+  bufferOverflow,
 }
 
 /// A sealed result type representing the outcome of a barcode scan or
 /// manual validation. Use exhaustive pattern matching to handle all cases.
 sealed class BarcodeResult {
+  /// The raw barcode string as read from the hardware scanner or manual input.
   final String rawValue;
   const BarcodeResult(this.rawValue);
 }

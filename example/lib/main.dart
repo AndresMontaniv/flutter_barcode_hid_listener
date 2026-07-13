@@ -124,7 +124,14 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
     final text = _manualController.text.trim();
     if (text.isEmpty) return;
 
-    final result = _barcodeService.validateManualEntry(text);
+    // Pass the same allowedFormats configured in our service
+    final result = _validateManualInput(text, [
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.upcA,
+      BarcodeFormat.ean14,
+    ]);
+
     switch (result) {
       case BarcodeCapture():
         _processCapture(result);
@@ -132,6 +139,41 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
         _processRejection(result);
     }
     _manualController.clear();
+  }
+
+  /// Validates a manually entered barcode string against [allowedFormats],
+  /// mirroring the hardware-wedge normalization performed by [BarcodeKeyboardService].
+  BarcodeResult _validateManualInput(String rawValue, List<BarcodeFormat> allowedFormats) {
+    if (rawValue.isEmpty) {
+      return const BarcodeRejection('', RejectionReason.empty);
+    }
+
+    var code = rawValue.trim();
+
+    // --- GS1 AI NORMALIZATION ---
+    // Strip the 2-digit '01' Application Identifier from 16-digit EAN-14 codes
+    // to match the hardware wedge normalization behavior.
+    if (code.length == 16 && code.startsWith('01')) {
+      code = code.substring(2);
+    }
+
+    // Stage 1: Check against allowed formats
+    final allowedToTest = allowedFormats.isNotEmpty ? allowedFormats : BarcodeFormat.values;
+    final allowedFormat = BarcodeFormat.detectFormat(code, allowedToTest);
+
+    if (allowedFormat != BarcodeFormat.unknown) {
+      return BarcodeCapture(code, allowedFormat);
+    }
+
+    // Stage 2: Check if it's a known but disallowed format
+    if (allowedFormats.isNotEmpty) {
+      final knownFormat = BarcodeFormat.detectFormat(code, BarcodeFormat.values);
+      if (knownFormat != BarcodeFormat.unknown) {
+        return BarcodeRejection(code, RejectionReason.disallowedFormat, knownFormat);
+      }
+    }
+
+    return BarcodeRejection(code, RejectionReason.unsupportedFormat, BarcodeFormat.unknown);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────
