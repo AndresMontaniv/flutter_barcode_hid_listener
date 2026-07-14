@@ -20,6 +20,8 @@ import '../services/barcode_keyboard_service.dart';
 ///   the service instance.
 /// * **Hot-swappable configuration** — changing [config] tears down the old
 ///   service and spins up a fresh instance with the new settings.
+/// * **Automatic Focus Shielding** — `autoPauseOnFocus` automatically pauses
+///   hardware scanning whenever an input text field gains focus.
 ///
 /// {@tool snippet}
 /// ```dart

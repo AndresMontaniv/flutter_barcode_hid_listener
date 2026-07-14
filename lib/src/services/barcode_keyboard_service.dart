@@ -20,6 +20,7 @@ const _gs1Prefix = '01';
 /// exclusive ownership of the [HardwareKeyboard.instance] handler to prevent
 /// memory leaks and simultaneous global stream collisions.
 class BarcodeKeyboardService {
+  /// The configuration applied to this service instance.
   final BarcodeScannerConfig config;
 
   /// Class-level tracker: only one instance may own the HardwareKeyboard
