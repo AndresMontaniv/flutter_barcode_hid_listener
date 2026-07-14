@@ -13,8 +13,20 @@ const _gs1Prefix = '01';
 /// [BarcodeCapture] objects through a broadcast [Stream].
 ///
 /// Rejected scans are emitted on a secondary [rejectionStream].
+///
+/// A pure Dart service that intercepts OS-level hardware keystrokes.
+///
+/// This service must be instantiated outside the widget tree. It guarantees
+/// exclusive ownership of the [HardwareKeyboard.instance] handler to prevent
+/// memory leaks and simultaneous global stream collisions.
 class BarcodeKeyboardService {
+  /// The configuration applied to this service instance.
   final BarcodeScannerConfig config;
+
+  /// Class-level tracker: only one instance may own the HardwareKeyboard
+  /// handler at any time. Calling [start] on a new instance automatically
+  /// pauses the previous instance's handler.
+  static BarcodeKeyboardService? _activeInstance;
 
   final StreamController<BarcodeCapture> _controller = StreamController<BarcodeCapture>.broadcast();
   final StreamController<BarcodeRejection> _rejectionController = StreamController<BarcodeRejection>.broadcast();
@@ -34,23 +46,43 @@ class BarcodeKeyboardService {
   /// validation or were deduplicated.
   Stream<BarcodeRejection> get rejectionStream => _rejectionController.stream;
 
-  /// Registers the keyboard handler with [HardwareKeyboard].
-  ///
-  /// Calling this when the handler is already registered is a no-op.
+  /// Begins intercepting hardware keystrokes.
+  /// 
+  /// This method is idempotent. Calling it multiple times will safely 
+  /// enforce exclusive handler ownership without duplicating listeners.
   void start() {
     if (_isRunning) return;
+
+    // --- EXCLUSIVE HANDLER GUARD ---
+    // If another service instance is currently active, stop it first
+    // to prevent duplicate global stream broadcasts across hidden tabs.
+    if (_activeInstance != null && _activeInstance != this) {
+      _activeInstance!.stop();
+    }
+
     _isRunning = true;
+    _activeInstance = this;
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
-  /// Removes the keyboard handler from [HardwareKeyboard].
-  ///
-  /// Calling this when the handler is not registered is a no-op.
+  /// Safely detaches from the global keyboard stream.
+  /// 
+  /// Must be called during the teardown phase of the consuming Cubit or Provider
+  /// to ensure cleanly disposed stream subscriptions.
   void stop() {
     if (!_isRunning) return;
     _isRunning = false;
+    
+    // Release static ownership if this instance was the active one
+    if (_activeInstance == this) {
+      _activeInstance = null;
+    }
+    
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
   }
+
+  /// Whether this specific service instance currently owns the global keyboard handler.
+  bool get isActive => _activeInstance == this;
 
   /// Removes the keyboard handler and closes both stream controllers.
   void dispose() {

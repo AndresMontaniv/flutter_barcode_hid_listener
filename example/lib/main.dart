@@ -92,6 +92,11 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
   /// Reacts to global focus changes by pausing or resuming the hardware
   /// keyboard handler based on whether an [EditableText] is focused.
   void _onGlobalFocusChanged() {
+    // --- ROUTE VISIBILITY GUARD ---
+    // If this screen is covered by another pushed screen (like WidgetWrapperScreen),
+    // ignore global focus shifts so we don't steal hardware ownership from the active route!
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+
     final focus = FocusManager.instance.primaryFocus;
 
     final isTextFieldActive = focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null || focus?.context?.widget is EditableText;
@@ -209,19 +214,12 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
         backgroundColor: theme.colorScheme.inversePrimary,
         actions: [
           TextButton.icon(
-            onPressed: () async {
-              // 1. Pause background hardware listening on this screen
-              _barcodeService.stop();
-
-              // 2. Navigate to the declarative widget screen and wait for return
-              await Navigator.of(context).push(
+            onPressed: () {
+              Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const WidgetWrapperScreen(),
                 ),
               );
-
-              // 3. Resume listening the exact millisecond the user pops back!
-              _barcodeService.start();
             },
             icon: const Icon(Icons.widgets_outlined),
             label: const Text('Widget Mode'),

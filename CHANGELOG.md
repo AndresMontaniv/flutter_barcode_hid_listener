@@ -1,3 +1,14 @@
+## 1.0.1
+
+**Core Engine Upgrade: Exclusive Handler Guard**
+* Added static ownership tracking (`_activeInstance`) to `BarcodeKeyboardService`.
+* Guarantees that only **one** hardware keyboard handler is active globally at any time, preventing duplicate scan broadcasts across persistent navigation views.
+
+**Declarative UI Upgrade: `autoPauseOnFocus`**
+* Added `autoPauseOnFocus` property (defaulting to `true`) to `BarcodeKeyboardListener`.
+* Automatically pauses background hardware scanning whenever an input text field (`EditableText`) gains focus.
+* Integrated automatic route visibility checks (`ModalRoute.isCurrent`), ensuring hidden routes never steal scanner ownership.
+
 ## 1.0.0
 
 Initial stable release of `barcode_hid_listener`!

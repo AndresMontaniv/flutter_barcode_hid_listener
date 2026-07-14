@@ -36,41 +36,21 @@ We provide two distinct ways to integrate barcode listening into your app depend
 
 ### Option 1: The Declarative Widget Wrapper (Recommended for UI)
 
-The easiest way to get started. Wrap your screen in a `BarcodeKeyboardListener` to automatically handle background listening, stream subscriptions, and lifecycle teardown.
+Wrap your screen or specific widget tree with `BarcodeKeyboardListener`. Focus management and route-visibility are handled automatically!
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:barcode_hid_listener/barcode_hid_listener.dart';
-
-class CheckoutScreen extends StatefulWidget {
-  @override
-  State<CheckoutScreen> createState() => _CheckoutScreenState();
-}
-
-class _CheckoutScreenState extends State<CheckoutScreen> {
-  String _lastScan = 'Scan an item...';
-
-  @override
-  Widget build(BuildContext context) {
-    return BarcodeKeyboardListener(
-      // Optional: Pause background listening dynamically (e.g., when a text field is focused)
-      enabled: true, 
-      config: const BarcodeScannerConfig(
-        allowedFormats: [BarcodeFormat.ean13, BarcodeFormat.upcA],
-      ),
-      onBarcodeScanned: (BarcodeCapture capture) {
-        setState(() => _lastScan = 'Scanned: ${capture.rawValue} (${capture.format.name})');
-      },
-      onBarcodeRejected: (BarcodeRejection rejection) {
-        debugPrint('Rejected ${rejection.rawValue}:${rejection.reason.name}');
-      },
-      child: Scaffold(
-        body: Center(child: Text(_lastScan)),
-      ),
-    );
-  }
-}
-
+BarcodeKeyboardListener(
+  // autoPauseOnFocus is true by default. The scanner will automatically 
+  // pause if the user taps into a TextField!
+  onBarcodeScanned: (capture) {
+    print("Scanned: ${capture.rawValue}");
+  },
+  child: Scaffold(
+    body: TextField(
+      decoration: InputDecoration(labelText: 'Manual Entry (Scanner pauses while typing)'),
+    ),
+  ),
+);
 ```
 
 ### Option 2: The Imperative Service (For Advanced State Management)
@@ -139,7 +119,7 @@ Because physical USB/Bluetooth HID scanners act as operating system keyboards, s
 
 We provide 3 simple presentation-layer recipes (`FocusNode` Gatekeeping, Global Focus Shielding, and UI Deduplication) to handle this effortlessly in your app.
 
-👉 **[Read the authoritative guide on avoiding HID Wedge Focus Collisions here.](GUIDE_HID_WEDGE_COLLISIONS.md)**
+👉 **[Read the authoritative guide on avoiding HID Wedge Focus Collisions. The file is on the root of the project "GUIDE_HID_WEDGE_COLLISIONS.md".](GUIDE_HID_WEDGE_COLLISIONS.md)**
 
 ---
 

@@ -28,6 +28,7 @@ sealed class BarcodeResult {
 
 /// A successfully captured barcode with its detected [format].
 class BarcodeCapture extends BarcodeResult {
+  /// The verified symbology format of the scanned barcode.
   final BarcodeFormat format;
 
   const BarcodeCapture(super.rawValue, this.format);
@@ -48,7 +49,13 @@ class BarcodeCapture extends BarcodeResult {
 
 /// A rejected barcode scan with the [reason] for rejection.
 class BarcodeRejection extends BarcodeResult {
+  /// The specific reason this scan was rejected.
   final RejectionReason reason;
+
+  /// The detected format of the rejected scan, if applicable.
+  /// 
+  /// This is populated when [reason] is [RejectionReason.disallowedFormat]
+  /// or [RejectionReason.deduplicated].
   final BarcodeFormat? format;
 
   const BarcodeRejection(super.rawValue, this.reason, [this.format]);
