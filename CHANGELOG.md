@@ -1,3 +1,14 @@
-## 0.0.1
+## 1.0.0
 
-* TODO: Describe initial release.
+Initial stable release of `barcode_keyboard_listener`!
+
+**Core Engine**
+* **Two-Stage Symbology Gatekeeper:** Built-in validation for global retail and logistics formats (`EAN-13`, `UPC-A`, `EAN-8`, `UPC-E`, `EAN-14`, `Code 39`).
+* **Temporal Deduplication:** Built-in shielding to ignore accidental double-scans within configurable time windows.
+* **GS1 AI Normalizer:** Automatically intercepts and strips the `01` Application Identifier prefix from 16-digit hardware EAN-14 shipping codes to guarantee 14-digit downstream consistency.
+
+**Architecture & Usage**
+* **Declarative Widget Wrapper (`BarcodeKeyboardListener`):** Drop-in UI widget with automatic lifecycle management, dynamic pausing (`enabled`), and `FocusNode` gatekeeping.
+* **Imperative Service (`BarcodeKeyboardService`):** Headless Dart streams for advanced state management (Riverpod/Bloc).
+* **Proactive Global Focus Shield:** Hardware streams safely pause when active text fields gain focus, preventing OS-level HID wedge duplication.
+* **Zero Dependencies:** Pure Dart. Runs flawlessly on iOS, Android, Windows, macOS, Linux, and Web.

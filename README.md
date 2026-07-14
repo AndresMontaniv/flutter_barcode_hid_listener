@@ -1,39 +1,151 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Barcode Keyboard Listener
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+[![Pub Version](https://img.shields.io/pub/v/barcode_keyboard_listener)](https://pub.dev/packages/barcode_keyboard_listener)
+[![Pub Points](https://img.shields.io/pub/points/barcode_keyboard_listener)](https://pub.dev/packages/barcode_keyboard_listener/score)
+[![Flutter Platform](https://img.shields.io/badge/Platform-Flutter-02569B?logo=flutter)](https://flutter.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+A headless, zero-dependency Flutter package for intercepting, buffering, and validating physical HID barcode scanner keystrokes (USB/Bluetooth). 
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+Designed for enterprise Retail POS, Warehouse Inventory, and Logistics applications, this package catches raw hardware keystrokes in the background and transforms them into clean, strongly-typed Dart streams—without requiring any native OS plugins.
 
-## Features
+## ✨ Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- 🛡️ **Two-Stage Symbology Gatekeeper:** Built-in Regex validation for global retail and logistics formats (UPC, EAN, Code 39).
+- ⏱️ **Temporal Deduplication:** Automatically ignores accidental double-scans within a configurable time window.
+- 🔄 **GS1 AI Normalization:** Automatically intercepts and strips the `01` Application Identifier prefix from 16-digit hardware EAN-14 scans.
+- 🚀 **Dual Paradigm:** Drop in a simple, declarative UI `Widget`, or run the headless `Service` inside your Riverpod/Bloc state controllers.
+- 🚫 **Zero Dependencies:** Pure Dart. Runs flawlessly on iOS, Android, Windows, macOS, Linux, and Web.
 
-## Getting started
+---
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+## 📦 Installation
 
-## Usage
+Add it to your `pubspec.yaml`:
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+```bash
+flutter pub add barcode_keyboard_listener
 
-```dart
-const like = 'sample';
 ```
 
-## Additional information
+---
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+## 💻 Usage
+
+We provide two distinct ways to integrate barcode listening into your app depending on your architectural needs.
+
+### Option 1: The Declarative Widget Wrapper (Recommended for UI)
+
+The easiest way to get started. Wrap your screen in a `BarcodeKeyboardListener` to automatically handle background listening, stream subscriptions, and lifecycle teardown.
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:barcode_keyboard_listener/barcode_keyboard_listener.dart';
+
+class CheckoutScreen extends StatefulWidget {
+  @override
+  State<CheckoutScreen> createState() => _CheckoutScreenState();
+}
+
+class _CheckoutScreenState extends State<CheckoutScreen> {
+  String _lastScan = 'Scan an item...';
+
+  @override
+  Widget build(BuildContext context) {
+    return BarcodeKeyboardListener(
+      // Optional: Pause background listening dynamically (e.g., when a text field is focused)
+      enabled: true, 
+      config: const BarcodeScannerConfig(
+        allowedFormats: [BarcodeFormat.ean13, BarcodeFormat.upcA],
+      ),
+      onBarcodeScanned: (BarcodeCapture capture) {
+        setState(() => _lastScan = 'Scanned: ${capture.rawValue} (${capture.format.name})');
+      },
+      onBarcodeRejected: (BarcodeRejection rejection) {
+        debugPrint('Rejected ${rejection.rawValue}:${rejection.reason.name}');
+      },
+      child: Scaffold(
+        body: Center(child: Text(_lastScan)),
+      ),
+    );
+  }
+}
+
+```
+
+### Option 2: The Imperative Service (For Advanced State Management)
+
+If you are managing background streams inside a View Model, Bloc, or Riverpod Provider, you can instantiate the headless service directly.
+
+```dart
+import 'package:barcode_keyboard_listener/barcode_keyboard_listener.dart';
+
+// 1. Initialize Configuration
+final config = BarcodeScannerConfig(
+  allowedFormats: BarcodeFormat.values,
+  deduplicationWindow: const Duration(milliseconds: 500),
+);
+
+// 2. Instantiate Service
+final service = BarcodeKeyboardService(config);
+
+// 3. Listen to Streams
+service.barcodeStream.listen((capture) {
+  print('Success! GTIN: ${capture.rawValue}');
+});
+
+service.rejectionStream.listen((rejection) {
+  print('Blocked: ${rejection.reason.name}');
+});
+
+// 4. Start Listening (Don't forget to call service.dispose() when done!)
+service.start();
+
+```
+
+---
+
+## ⚙️ Configuration & Symbologies
+
+### `BarcodeScannerConfig`
+
+You can tailor the hardware ingestion engine to your specific hardware environments using the `BarcodeScannerConfig` object:
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `terminators` | `[LogicalKeyboardKey.enter]` | Hardware keystrokes signaling the end of a scan. |
+| `bufferTimeout` | `100ms` | Maximum elapsed time between keystrokes before the buffer resets. Filters out slow human typing. |
+| `deduplicationWindow` | `500ms` | Time window where identical back-to-back scans are ignored. |
+| `allowedFormats` | `[]` *(All)* | Whitelist of allowed symbologies. Unlisted formats are cleanly blocked. |
+
+### Supported `BarcodeFormat` Values
+
+The Two-Stage Gatekeeper currently detects and routes the following global standards:
+
+* `ean13` (Standard retail items)
+* `upcA` (North American retail items)
+* `ean8` (Small retail items)
+* `upcE` (Small North American retail items)
+* `ean14` / GTIN-14 (Outer cases and warehouse pallets)
+* `code39` (Alphanumeric inventory badges and asset tags)
+
+---
+
+## 💡 Best Practices & Troubleshooting
+
+### Preventing TextField Focus Collisions (HID Wedge Behavior)
+
+Because physical USB/Bluetooth HID scanners act as operating system keyboards, scanning a barcode while a `TextField` (like a search bar or manual input form) is focused can cause duplicate keystroke events between your active UI text field and the background hardware stream.
+
+We provide 3 simple presentation-layer recipes (`FocusNode` Gatekeeping, Global Focus Shielding, and UI Deduplication) to handle this effortlessly in your app.
+
+👉 **[Read the authoritative guide on avoiding HID Wedge Focus Collisions here.](GUIDE_HID_WEDGE_COLLISIONS.md)**
+
+---
+
+## 🐛 Bugs and 🤝 Contributing
+
+We highly encourage you to report any malfunctions, bugs, or feature recommendations! 
+
+Please do not hesitate to leave an issue on our [GitHub Issues page](https://github.com/AndresMontaniv/flutter_barcode_keyboard_listener/issues). 
+
