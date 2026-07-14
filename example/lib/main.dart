@@ -71,22 +71,41 @@ class _ScannerTestScreenState extends State<ScannerTestScreen> {
     // 2. Instantiate the service.
     _barcodeService = BarcodeKeyboardService(config);
 
-    // 3. Start listening to HardwareKeyboard.
+    // 3. Subscribe to the barcode stream.
+    _barcodeSubscription = _barcodeService.barcodeStream.listen(_processCapture);
+
+    // 4. Subscribe to the rejection stream.
+    _rejectionSubscription = _barcodeService.rejectionStream.listen(_processRejection);
+
+    // 5. PROACTIVE GLOBAL FOCUS GATEKEEPER
+    //    Listen to global focus changes. If any EditableText (the inner engine
+    //    of TextField / TextFormField) gains focus, proactively pause background
+    //    hardware listening so the UI input form can handle the HID keystrokes
+    //    without duplicate stream events. Covers every text input on the screen
+    //    without wiring individual FocusNodes.
+    FocusManager.instance.addListener(_onGlobalFocusChanged);
+
+    // 6. Start listening to HardwareKeyboard.
     _barcodeService.start();
+  }
 
-    // 4. Subscribe to the barcode stream.
-    _barcodeSubscription = _barcodeService.barcodeStream.listen(
-      _processCapture,
-    );
+  /// Reacts to global focus changes by pausing or resuming the hardware
+  /// keyboard handler based on whether an [EditableText] is focused.
+  void _onGlobalFocusChanged() {
+    final focus = FocusManager.instance.primaryFocus;
 
-    // 5. Subscribe to the rejection stream.
-    _rejectionSubscription = _barcodeService.rejectionStream.listen(
-      _processRejection,
-    );
+    final isTextFieldActive = focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null || focus?.context?.widget is EditableText;
+
+    if (isTextFieldActive) {
+      _barcodeService.stop();
+    } else {
+      _barcodeService.start();
+    }
   }
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_onGlobalFocusChanged);
     _barcodeSubscription.cancel();
     _rejectionSubscription.cancel();
     _barcodeService.dispose();
