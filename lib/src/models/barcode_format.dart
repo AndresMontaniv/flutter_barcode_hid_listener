@@ -21,6 +21,12 @@ enum BarcodeFormat {
   ///
   /// Compressed 8-digit barcode format for small items. Distinct from [ean8]
   /// when explicitly filtered in allowed formats.
+  /// 
+  /// *Note: HID scanner payloads for UPC-E typically do not include the check digit
+  /// in the raw string, making it share the same 8-digit pattern as EAN-8. When
+  /// [BarcodeScannerConfig.allowedFormats] is empty (accept-all mode), an 8-digit
+  /// scan will always be reported as [ean8] because it is checked first. To explicitly
+  /// detect UPC-E, you must pass `allowedFormats: [BarcodeFormat.upcE]`.*
   upcE(r'^\d{8}$'),
 
   /// **EAN-14** (Warehouse & logistics)

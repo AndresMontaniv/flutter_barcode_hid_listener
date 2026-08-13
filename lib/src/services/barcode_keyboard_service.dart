@@ -87,6 +87,10 @@ class BarcodeKeyboardService {
   /// Removes the keyboard handler and closes both stream controllers.
   void dispose() {
     stop();
+    // Ensure static ref is cleared regardless of _isRunning state
+    if (_activeInstance == this) {
+      _activeInstance = null;
+    }
     _controller.close();
     _rejectionController.close();
   }

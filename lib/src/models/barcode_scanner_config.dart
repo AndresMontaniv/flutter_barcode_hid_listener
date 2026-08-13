@@ -49,7 +49,7 @@ class BarcodeScannerConfig {
     this.bufferTimeout = const Duration(milliseconds: 100),
     this.deduplicationWindow = const Duration(milliseconds: 500),
     this.allowedFormats = const [],
-    this.enableDebugLogs = true,
+    this.enableDebugLogs = false,
     this.maxBufferLength = 128,
   }) : assert(
          maxBufferLength >= 10 && maxBufferLength <= 256,

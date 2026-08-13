@@ -63,6 +63,14 @@ class BarcodeKeyboardListener extends StatefulWidget {
   /// Defaults to [true].
   final bool autoPauseOnFocus;
 
+  /// Whether to automatically pause scanning when the app enters the background
+  /// and resume it when the app returns to the foreground.
+  ///
+  /// Set to [false] if your app manages its own app lifecycle (e.g., via
+  /// a Bloc or Cubit that calls [BarcodeKeyboardService.start]/[stop] directly).
+  /// Defaults to [true] for plug-and-play convenience.
+  final bool listenForAppLifecycleChanges;
+
   /// Creates a declarative barcode keyboard listener widget.
   const BarcodeKeyboardListener({
     super.key,
@@ -72,6 +80,7 @@ class BarcodeKeyboardListener extends StatefulWidget {
     this.config = const BarcodeScannerConfig(),
     this.enabled = true,
     this.autoPauseOnFocus = true,
+    this.listenForAppLifecycleChanges = true,
   });
 
   @override
@@ -79,7 +88,7 @@ class BarcodeKeyboardListener extends StatefulWidget {
       _BarcodeKeyboardListenerState();
 }
 
-class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
+class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> with WidgetsBindingObserver {
   late BarcodeKeyboardService _service;
   StreamSubscription<BarcodeCapture>? _captureSub;
   StreamSubscription<BarcodeRejection>? _rejectionSub;
@@ -91,9 +100,36 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
     if (widget.autoPauseOnFocus) {
       FocusManager.instance.addListener(_onGlobalFocusChanged);
     }
+    if (widget.listenForAppLifecycleChanges) {
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.listenForAppLifecycleChanges) return;
+
+    if (state == AppLifecycleState.resumed) {
+      // Resume scanning if widget is enabled and no text field is focused
+      if (widget.enabled) {
+        bool isTextFieldActive = false;
+        if (widget.autoPauseOnFocus) {
+          final focus = FocusManager.instance.primaryFocus;
+          isTextFieldActive = focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null ||
+                              focus?.context?.widget is EditableText;
+        }
+        if (!isTextFieldActive) {
+          _service.start();
+        }
+      }
+    } else {
+      // Pause scanning when app is backgrounded/inactive/hidden
+      _service.stop();
+    }
   }
 
   void _onGlobalFocusChanged() {
+    if (!mounted) return;
     if (!widget.autoPauseOnFocus) return;
 
     // --- ROUTE VISIBILITY GUARD ---
@@ -132,7 +168,9 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
 
   void _teardownService() {
     _captureSub?.cancel();
+    _captureSub = null;
     _rejectionSub?.cancel();
+    _rejectionSub = null;
     _service.dispose();
   }
 
@@ -145,6 +183,14 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
         FocusManager.instance.addListener(_onGlobalFocusChanged);
       } else {
         FocusManager.instance.removeListener(_onGlobalFocusChanged);
+      }
+    }
+
+    if (oldWidget.listenForAppLifecycleChanges != widget.listenForAppLifecycleChanges) {
+      if (widget.listenForAppLifecycleChanges) {
+        WidgetsBinding.instance.addObserver(this);
+      } else {
+        WidgetsBinding.instance.removeObserver(this);
       }
     }
 
@@ -186,6 +232,9 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
   void dispose() {
     if (widget.autoPauseOnFocus) {
       FocusManager.instance.removeListener(_onGlobalFocusChanged);
+    }
+    if (widget.listenForAppLifecycleChanges) {
+      WidgetsBinding.instance.removeObserver(this);
     }
     _teardownService();
     super.dispose();

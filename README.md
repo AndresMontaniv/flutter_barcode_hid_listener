@@ -42,6 +42,10 @@ Wrap your screen or specific widget tree with `BarcodeKeyboardListener`. Focus m
 BarcodeKeyboardListener(
   // autoPauseOnFocus is true by default. The scanner will automatically 
   // pause if the user taps into a TextField!
+  //
+  // listenForAppLifecycleChanges is true by default. The scanner will automatically
+  // pause if the app is sent to the background (e.g. when the user opens
+  // another app) and resume when it comes back.
   onBarcodeScanned: (capture) {
     print("Scanned: ${capture.rawValue}");
   },
@@ -97,6 +101,7 @@ You can tailor the hardware ingestion engine to your specific hardware environme
 | `bufferTimeout` | `100ms` | Maximum elapsed time between keystrokes before the buffer resets. Filters out slow human typing. |
 | `deduplicationWindow` | `500ms` | Time window where identical back-to-back scans are ignored. |
 | `allowedFormats` | `[]` *(All)* | Whitelist of allowed symbologies. Unlisted formats are cleanly blocked. |
+| `enableDebugLogs` | `false` | Prints `[BarcodeKeyboardService]` rejections to the console. |
 
 ### Supported `BarcodeFormat` Values
 
@@ -105,9 +110,11 @@ The Two-Stage Gatekeeper currently detects and routes the following global stand
 * `ean13` (Standard retail items)
 * `upcA` (North American retail items)
 * `ean8` (Small retail items)
-* `upcE` (Small North American retail items)
+* `upcE` (Small North American retail items)*
 * `ean14` / GTIN-14 (Outer cases and warehouse pallets)
 * `code39` (Alphanumeric inventory badges and asset tags)
+
+*\*Note on UPC-E: HID scanner payloads for UPC-E typically do not include the check digit in the raw string, making it share the exact same 8-digit pattern as EAN-8. When `allowedFormats` is empty (accept-all mode), an 8-digit scan will always be reported as `ean8` because it is checked first. To explicitly detect UPC-E, you must pass `allowedFormats: [BarcodeFormat.upcE]`.*
 
 ---
 
